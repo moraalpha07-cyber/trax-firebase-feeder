@@ -1,14 +1,14 @@
 name: Feed Firebase Every 5 Seconds
+
 on:
   schedule:
     - cron: '* * * * *'
   workflow_dispatch:
+
 jobs:
   feed:
     runs-on: ubuntu-latest
     continue-on-error: true
-    env:
-      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
