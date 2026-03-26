@@ -2,8 +2,8 @@ name: Feed Firebase Every 5 Seconds
 
 on:
   schedule:
-    - cron: '* * * * *'   # GitHub Actions minimum = 1 min, script ඇතුළේ 5sec loop කරනවා
-  workflow_dispatch:        # Manual trigger
+    - cron: '* * * * *'
+  workflow_dispatch:
 
 jobs:
   feed:
@@ -24,6 +24,5 @@ jobs:
       - name: Run feeder
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
-          FIREBASE_DATABASE_URL: ${{ secrets.FIREBASE_DATABASE_URL }}
           GRAFANA_SESSION_ID: ${{ secrets.GRAFANA_SESSION_ID }}
         run: npm start
