@@ -16,10 +16,28 @@ const GRAFANA_URL = "https://monitor.trax-cloud.com/api/datasources/proxy/29/ren
 const SESSION_ID = process.env.GRAFANA_SESSION_ID;
 
 const projects = [
-  "beiersdorfin",
-  "pgpl",
+  "pepsicouk",
+  "ulpt",
+  "dlcpt",
+  "bdftr",
+  "mdlzrusf",
+  "marspl",
+  "mondelezde",
+  "mondelezno",
+  "mondelezkaza",
+  "jtihr",
+  "pngza2",
+  "beiersdorfuk",
+  "mondelezsa",
+  "beiersdorfsp",
+  "jdetr",
+  "ulbe",
   "diageotz",
-  "project3"
+  "marsbh",
+  "marskw",
+  "marsom",
+  "marsqa",
+  "marsuae"
 ];
 
 const metrics = [
