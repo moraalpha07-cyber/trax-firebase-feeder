@@ -7,7 +7,7 @@ const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
-    databaseURL: process.env.FIREBASE_DATABASE_URL
+    databaseURL: "https://grafana-7938e-default-rtdb.firebaseio.com"
   });
 }
 
@@ -25,29 +25,29 @@ const projects = [
 ];
 
 const metrics = [
-  { path: "validation",              name: "Validation" },
-  { path: "masking",                 name: "Masking" },
-  { path: "voting",                  name: "Voting" },
-  { path: "stitching",               name: "Stitching" },
-  { path: "online_pricing",          name: "Online Pricing" },
-  { path: "offline_pricing",         name: "Offline Pricing" },
-  { path: "scene_recognition",       name: "Scene Recognitions" },
-  { path: "category_expert",         name: "Category Expert" },
-  { path: "offline_validation",      name: "Offline Validation" },
-  { path: "offline_voting",          name: "Offline Voting" },
-  { path: "offline_pricing_voting",  name: "Offline Pricing Voting" },
-  { path: "voting_engine",           name: "Voting Engine" },
-  { path: "masking_engine",          name: "Masking Engine" },
-  { path: "pricing_voting",          name: "Pricing Voting" },
-  { path: "special_masking",         name: "Special Masking" },
-  { path: "masking_menu_items",      name: "Masking Menu Items" },
-  { path: "masking_price_labels",    name: "Masking Labels" },
-  { path: "masking_brand_hunt",      name: "Masking Brand Hunt" },
-  { path: "category_expert_voting",  name: "Expert Voting" },
-  { path: "offline_posm",            name: "Offline POSM" }
+  { path: "validation",             name: "Validation" },
+  { path: "masking",                name: "Masking" },
+  { path: "voting",                 name: "Voting" },
+  { path: "stitching",              name: "Stitching" },
+  { path: "online_pricing",         name: "Online Pricing" },
+  { path: "offline_pricing",        name: "Offline Pricing" },
+  { path: "scene_recognition",      name: "Scene Recognitions" },
+  { path: "category_expert",        name: "Category Expert" },
+  { path: "offline_validation",     name: "Offline Validation" },
+  { path: "offline_voting",         name: "Offline Voting" },
+  { path: "offline_pricing_voting", name: "Offline Pricing Voting" },
+  { path: "voting_engine",          name: "Voting Engine" },
+  { path: "masking_engine",         name: "Masking Engine" },
+  { path: "pricing_voting",         name: "Pricing Voting" },
+  { path: "special_masking",        name: "Special Masking" },
+  { path: "masking_menu_items",     name: "Masking Menu Items" },
+  { path: "masking_price_labels",   name: "Masking Labels" },
+  { path: "masking_brand_hunt",     name: "Masking Brand Hunt" },
+  { path: "category_expert_voting", name: "Expert Voting" },
+  { path: "offline_posm",           name: "Offline POSM" }
 ];
 
-// 🔹 Fetch one project data
+// 🔹 Fetch one project
 async function fetchProject(project) {
   const payloadParts = [];
 
@@ -78,7 +78,7 @@ async function fetchProject(project) {
 
   const json = await response.json();
 
-  // 🔹 Group total + oldestTask එකට
+  // 🔹 Group total + oldestTask
   const groupedData = {};
 
   json.forEach(series => {
@@ -95,7 +95,11 @@ async function fetchProject(project) {
         .replace(" - Oldest Task", "");
 
       if (!groupedData[metricName]) {
-        groupedData[metricName] = { lastUpdated: timestamp, total: null, oldestTask: null };
+        groupedData[metricName] = {
+          lastUpdated: timestamp,
+          total: null,
+          oldestTask: null
+        };
       }
 
       if (isOldestTask) {
@@ -110,12 +114,11 @@ async function fetchProject(project) {
   return groupedData;
 }
 
-// 🔹 Main - fetch all + push to Firebase
+// 🔹 Main loop
 async function main() {
   console.log("🚀 Starting fetch cycle...");
 
-  // 5 seconds loop - GitHub Actions 1 min block ඇතුළේ
-  const RUN_DURATION_MS = 55 * 1000; // 55 seconds run කරනවා
+  const RUN_DURATION_MS = 55 * 1000; // 55 seconds
   const INTERVAL_MS = 5 * 1000;      // හැම 5 seconds කට
 
   const startTime = Date.now();
@@ -124,8 +127,6 @@ async function main() {
     const cycleStart = Date.now();
 
     try {
-      const allData = {};
-
       // 🔹 All projects parallel fetch
       const results = await Promise.all(
         projects.map(async project => ({
@@ -134,10 +135,9 @@ async function main() {
         }))
       );
 
+      const allData = {};
       results.forEach(({ project, data }) => {
-        if (data) {
-          allData[project] = data;
-        }
+        if (data) allData[project] = data;
       });
 
       // 🔹 Firebase update
@@ -152,7 +152,7 @@ async function main() {
       console.error("❌ Cycle error:", e);
     }
 
-    // 🔹 Next cycle වෙනකන් wait
+    // 🔹 Next cycle wait
     const elapsed = Date.now() - cycleStart;
     const waitTime = Math.max(0, INTERVAL_MS - elapsed);
     await new Promise(resolve => setTimeout(resolve, waitTime));
