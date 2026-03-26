@@ -73,7 +73,7 @@ async function fetchProject(project) {
       "Content-Type": "application/x-www-form-urlencoded"
     },
     body: payload
-  }, 8000); // 8s timeout per request
+  }, 8000);
 
   if (!response.ok) {
     console.error(`❌ Error ${project}: ${response.status}`);
@@ -120,7 +120,9 @@ async function main() {
   console.log("🚀 Starting fetch cycle...");
 
   const RUN_DURATION_MS = 55 * 1000; // 55 seconds total
-  const INTERVAL_MS = 5 * 1000;      // every 5 seconds
+  const INTERVAL_MS     = 5 * 1000;  // every 5 seconds
+  const MIN_WAIT_MS     = 1000;      // minimum 1s between cycles (runaway fix)
+
   const startTime = Date.now();
   let cycleCount = 0;
 
@@ -170,9 +172,10 @@ async function main() {
       console.error("❌ Cycle error:", e.message);
     }
 
-    // 🔹 Next cycle wait — always wait full 5s
-    const elapsed = Date.now() - cycleStart;
-    const waitTime = Math.max(0, INTERVAL_MS - elapsed);
+    // 🔹 FIX: cycleStart-based wait — error/slow cycles වලදී runaway loop නවතිනවා
+    const cycleEnd = Date.now();
+    const nextCycleTarget = cycleStart + INTERVAL_MS;
+    const waitTime = Math.max(MIN_WAIT_MS, nextCycleTarget - cycleEnd);
     await new Promise(resolve => setTimeout(resolve, waitTime));
   }
 
