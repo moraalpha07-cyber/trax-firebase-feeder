@@ -3,14 +3,12 @@ const admin = require("firebase-admin");
 
 // 🔹 Firebase init
 const serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT);
-
 if (!admin.apps.length) {
   admin.initializeApp({
     credential: admin.credential.cert(serviceAccount),
     databaseURL: "https://grafana-7938e-default-rtdb.firebaseio.com"
   });
 }
-
 const db = admin.database();
 
 // 🔹 Config
@@ -47,10 +45,17 @@ const metrics = [
   { path: "offline_posm",           name: "Offline POSM" }
 ];
 
+// 🔹 Fetch with timeout helper
+function fetchWithTimeout(url, options, timeoutMs = 8000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  return fetch(url, { ...options, signal: controller.signal })
+    .finally(() => clearTimeout(timer));
+}
+
 // 🔹 Fetch one project
 async function fetchProject(project) {
   const payloadParts = [];
-
   metrics.forEach(m => {
     payloadParts.push(
       `target=alias(prod.gauges.selector.queue.${m.path}.${project}.total,'${m.name} - Total')`
@@ -59,17 +64,16 @@ async function fetchProject(project) {
       `target=alias(aliasByNode(prod.gauges.selector.queue.${m.path}.${project}.oldestTask,4),'${m.name} - Oldest Task')`
     );
   });
-
   const payload = payloadParts.join("&") + "&from=-1h&until=now&format=json";
 
-  const response = await fetch(GRAFANA_URL, {
+  const response = await fetchWithTimeout(GRAFANA_URL, {
     method: "POST",
     headers: {
       "Cookie": `grafana_session=${SESSION_ID}`,
       "Content-Type": "application/x-www-form-urlencoded"
     },
     body: payload
-  });
+  }, 8000); // 8s timeout per request
 
   if (!response.ok) {
     console.error(`❌ Error ${project}: ${response.status}`);
@@ -80,12 +84,10 @@ async function fetchProject(project) {
 
   // 🔹 Group total + oldestTask
   const groupedData = {};
-
   json.forEach(series => {
     const lastValidPoint = series.datapoints
       .filter(dp => dp[0] !== null)
       .pop();
-
     if (lastValidPoint) {
       const timestamp = lastValidPoint[1] * 1000;
       const value = lastValidPoint[0];
@@ -101,7 +103,6 @@ async function fetchProject(project) {
           oldestTask: null
         };
       }
-
       if (isOldestTask) {
         groupedData[metricName].oldestTask = value;
       } else {
@@ -118,21 +119,34 @@ async function fetchProject(project) {
 async function main() {
   console.log("🚀 Starting fetch cycle...");
 
-  const RUN_DURATION_MS = 55 * 1000; // 55 seconds
-  const INTERVAL_MS = 5 * 1000;      // හැම 5 seconds කට
-
+  const RUN_DURATION_MS = 55 * 1000; // 55 seconds total
+  const INTERVAL_MS = 5 * 1000;      // every 5 seconds
   const startTime = Date.now();
+  let cycleCount = 0;
+
+  // 🔹 Hard kill safety net — 58s වෙද්දී force exit
+  const hardKillTimer = setTimeout(() => {
+    console.log("⏱️ Hard kill timer triggered. Force exiting.");
+    process.exit(0);
+  }, 58 * 1000);
 
   while (Date.now() - startTime < RUN_DURATION_MS) {
     const cycleStart = Date.now();
+    cycleCount++;
+    console.log(`🔄 Cycle #${cycleCount} started at ${new Date().toISOString()}`);
 
     try {
-      // 🔹 All projects parallel fetch
+      // 🔹 All projects parallel fetch — with per-project error isolation
       const results = await Promise.all(
-        projects.map(async project => ({
-          project,
-          data: await fetchProject(project)
-        }))
+        projects.map(async project => {
+          try {
+            const data = await fetchProject(project);
+            return { project, data };
+          } catch (err) {
+            console.error(`❌ Project ${project} failed: ${err.message}`);
+            return { project, data: null };
+          }
+        })
       );
 
       const allData = {};
@@ -140,26 +154,39 @@ async function main() {
         if (data) allData[project] = data;
       });
 
-      // 🔹 Firebase update
-      await db.ref("trax/queue_metrics").set({
-        ...allData,
-        _lastUpdated: Date.now()
-      });
+      // 🔹 Firebase update with timeout
+      await Promise.race([
+        db.ref("trax/queue_metrics").set({
+          ...allData,
+          _lastUpdated: Date.now()
+        }),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Firebase write timeout")), 4000)
+        )
+      ]);
 
       console.log(`✅ Firebase updated at ${new Date().toISOString()}`);
-
     } catch (e) {
-      console.error("❌ Cycle error:", e);
+      console.error("❌ Cycle error:", e.message);
     }
 
     // 🔹 Next cycle wait
     const elapsed = Date.now() - cycleStart;
     const waitTime = Math.max(0, INTERVAL_MS - elapsed);
-    await new Promise(resolve => setTimeout(resolve, waitTime));
+    if (Date.now() - startTime + waitTime < RUN_DURATION_MS) {
+      await new Promise(resolve => setTimeout(resolve, waitTime));
+    }
   }
 
-  console.log("✅ Done. Exiting.");
+  clearTimeout(hardKillTimer);
+  console.log(`✅ Done. ${cycleCount} cycles completed. Exiting.`);
+
+  // 🔹 Firebase connection cleanly close
+  await admin.app().delete();
   process.exit(0);
 }
 
-main();
+main().catch(err => {
+  console.error("💥 Fatal error:", err);
+  process.exit(1);
+});
