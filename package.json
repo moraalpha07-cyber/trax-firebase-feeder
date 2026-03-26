@@ -1,1 +1,12 @@
-
+{
+  "name": "trax-firebase-feeder",
+  "version": "1.0.0",
+  "main": "src/fetchAndFeed.js",
+  "scripts": {
+    "start": "node src/fetchAndFeed.js"
+  },
+  "dependencies": {
+    "firebase-admin": "^11.11.0",
+    "node-fetch": "^2.7.0"
+  }
+}
