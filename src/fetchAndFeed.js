@@ -170,12 +170,10 @@ async function main() {
       console.error("❌ Cycle error:", e.message);
     }
 
-    // 🔹 Next cycle wait
+    // 🔹 Next cycle wait — always wait full 5s
     const elapsed = Date.now() - cycleStart;
     const waitTime = Math.max(0, INTERVAL_MS - elapsed);
-    if (Date.now() - startTime + waitTime < RUN_DURATION_MS) {
-      await new Promise(resolve => setTimeout(resolve, waitTime));
-    }
+    await new Promise(resolve => setTimeout(resolve, waitTime));
   }
 
   clearTimeout(hardKillTimer);
